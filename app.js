@@ -357,6 +357,23 @@ function saveRecord(clientId, exerciseId, weight, reps) {
   return { saved: true, wasGold, isGold };
 }
 
+// Overwrite a record unconditionally (used to correct bad data)
+function forceUpdateRecord(clientId, exerciseId, weight, reps) {
+  const volume = Math.round(weight * reps);
+  const existing = getRecord(clientId, exerciseId);
+  const now = Date.now();
+  if (existing) {
+    existing.weight = weight;
+    existing.reps   = reps;
+    existing.volume = volume;
+    existing.updatedAt = now;
+  } else {
+    App.data.records.push({ id: uid(), clientId, exerciseId, weight, reps, volume, updatedAt: now });
+  }
+  save(); pushData();
+  return { saved: true };
+}
+
 /* ═══════════════════════════════════════════════════
    LEADERBOARD LOGIC
 ═══════════════════════════════════════════════════ */
@@ -595,9 +612,9 @@ function renderClientDetail() {
           <div class="list-card-name">${escHtml(r.exercise.name)}</div>
           <div class="list-card-meta">${escHtml(r.exercise.category||'')} · ${fmt(r.weight)} lbs × ${fmt(r.reps)} reps</div>
         </div>
-        <div class="list-card-right" style="text-align:right">
+        <div class="list-card-right" style="text-align:right;gap:8px;display:flex;flex-direction:column;align-items:flex-end">
           <div style="font-weight:700;color:var(--c-light)">${fmtVolume(r.volume || r.weight * r.reps)} lbs</div>
-          <div style="font-size:11px;color:var(--c-muted)">volume</div>
+          <button class="btn btn-sm btn-outline" data-edit-record-client="${escHtml(client.id)}" data-edit-record-exercise="${escHtml(r.exercise.id)}" style="font-size:11px;padding:2px 8px">Edit</button>
         </div>
       </div>`).join('');
   }
@@ -964,6 +981,13 @@ function attachClientDetailHandlers() {
 
   const sessionBtn = $id('startSessionDetailBtn');
   if (sessionBtn) sessionBtn.addEventListener('click', () => startClientSession(App.detailClientId));
+
+  document.querySelectorAll('[data-edit-record-client]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditRecordModal(btn.dataset.editRecordClient, btn.dataset.editRecordExercise);
+    });
+  });
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1015,7 +1039,12 @@ function closeAllModals() {
 function openAddRecordModal() {
   // Reset form
   const s = App.data.settings;
-  App.addForm = { clientId: null, clientName: '', exerciseId: null, exerciseName: '', exerciseCat: '', weight: '', reps: '' };
+  App.addForm = { clientId: null, clientName: '', exerciseId: null, exerciseName: '', exerciseCat: '', weight: '', reps: '', forceUpdate: false };
+  // Restore normal modal title / button
+  const titleEl = $id('addRecordModal').querySelector('.modal-title');
+  const saveBtn = $id('saveRecordBtn');
+  if (titleEl) titleEl.textContent = 'Add Record';
+  if (saveBtn) saveBtn.textContent = 'SAVE RECORD';
 
   resetAddForm();
 
@@ -1036,6 +1065,35 @@ function openAddRecordModal() {
       $id('clientSearch').focus();
     }
   }, 350);
+}
+
+function openEditRecordModal(clientId, exerciseId) {
+  const client   = getClient(clientId);
+  const exercise = getExercise(exerciseId);
+  const record   = getRecord(clientId, exerciseId);
+  if (!client || !exercise || !record) return;
+
+  App.addForm = { clientId: null, clientName: '', exerciseId: null, exerciseName: '', exerciseCat: '', weight: '', reps: '', forceUpdate: true };
+  resetAddForm();
+
+  selectClient(client.id, client.name);
+  selectExercise(exercise.id, exercise.name, exercise.category || '');
+
+  App.addForm.weight = String(record.weight);
+  App.addForm.reps   = String(record.reps);
+  $id('weightDisplay').textContent = fmt(record.weight);
+  $id('repsDisplay').textContent   = fmt(record.reps);
+  $id('weightVal').value = record.weight;
+  $id('repsVal').value   = record.reps;
+
+  // Signal edit mode in the UI
+  const titleEl = $id('addRecordModal').querySelector('.modal-title');
+  const saveBtn = $id('saveRecordBtn');
+  if (titleEl) titleEl.textContent = 'Edit Record';
+  if (saveBtn) saveBtn.textContent = 'SAVE CHANGES';
+
+  updateVolumeDisplay();
+  openModal('addRecordModal');
 }
 
 function resetAddForm() {
@@ -1204,7 +1262,12 @@ function handleSaveRecord() {
   if (!weight || weight <= 0) { showToast('Please enter weight', 'error'); return; }
   if (!reps || reps <= 0)     { showToast('Please enter reps', 'error'); return; }
 
-  const result = saveRecord(af.clientId, af.exerciseId, weight, reps);
+  let result;
+  if (af.forceUpdate) {
+    result = forceUpdateRecord(af.clientId, af.exerciseId, weight, reps);
+  } else {
+    result = saveRecord(af.clientId, af.exerciseId, weight, reps);
+  }
 
   if (!result.saved && result.existing) {
     const ex = result.existing;
@@ -1215,7 +1278,10 @@ function handleSaveRecord() {
 
   closeModal('addRecordModal');
 
-  if (result.isGold && !result.wasGold) {
+  if (af.forceUpdate) {
+    showToast(`✓ Record updated — ${fmt(weight)} lbs × ${fmt(reps)} reps`, 'success');
+    if (App.currentView === 'clientDetail') renderCurrentView();
+  } else if (result.isGold && !result.wasGold) {
     // New #1 — confetti!
     triggerConfetti();
     showToast(`🥇 NEW #1 for ${af.exerciseName}!`, 'success', 4000);
