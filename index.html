@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="JM Flex">
+  <title>JM Flex App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     SETUP SCREEN (shown until API key is configured)
+═══════════════════════════════════════════════════ -->
+<div id="setupScreen" class="setup-screen">
+  <div class="setup-card">
+    <div class="setup-logo">
+      <!-- Logo placeholder -->
+      <div class="logo-box">JM</div>
+    </div>
+    <h1 class="setup-title">FLEX APP</h1>
+    <p class="setup-sub">Enter your credentials to connect</p>
+    <div class="setup-form">
+      <div class="form-group">
+        <label class="form-label">Server URL</label>
+        <input type="url" id="setupUrl" class="form-input" placeholder="https://jjjp.ca/jmflexapp" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <input type="text" id="setupApiKey" class="form-input" placeholder="Enter your API key" autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+      <button class="btn btn-primary btn-full" id="setupConnectBtn">CONNECT</button>
+      <div class="setup-error hidden" id="setupError"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN APP
+═══════════════════════════════════════════════════ -->
+<div id="app" class="app hidden">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-logo">
+      <!-- Replace src with actual logo image when available -->
+      <div class="logo-box-sm">JM</div>
+    </div>
+    <div class="header-center">
+      <span class="header-title">FLEX APP</span>
+    </div>
+    <div class="header-right">
+      <button class="gender-toggle" id="genderToggle" title="Toggle gender filter">
+        <span class="gt-opt" id="gtMale">M</span>
+        <span class="gt-sep">|</span>
+        <span class="gt-opt" id="gtFemale">F</span>
+      </button>
+      <div class="sync-dot" id="syncDot" title="Sync status"></div>
+    </div>
+  </header>
+
+  <!-- CLIENT MODE BANNER -->
+  <div class="client-banner hidden" id="clientBanner">
+    <div class="client-banner-info">
+      <span class="cb-label">SESSION</span>
+      <span class="cb-name" id="cbName">—</span>
+      <span class="cb-gender" id="cbGender"></span>
+    </div>
+    <button class="cb-exit" id="cbExit">✕ End Session</button>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main class="content-area" id="contentArea">
+    <!-- Populated by JS -->
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-btn active" data-view="leaderboard">
+      <span class="nav-icon">🏆</span>
+      <span class="nav-label">Board</span>
+    </button>
+    <button class="nav-btn add-btn" id="addRecordNavBtn" data-view="add">
+      <span class="nav-icon-add">＋</span>
+    </button>
+    <button class="nav-btn" data-view="clients">
+      <span class="nav-icon">👥</span>
+      <span class="nav-label">Clients</span>
+    </button>
+    <button class="nav-btn" data-view="exercises">
+      <span class="nav-icon">🏋️</span>
+      <span class="nav-label">Exercises</span>
+    </button>
+    <button class="nav-btn" data-view="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL BACKDROP
+═══════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="modalBackdrop"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     ADD RECORD MODAL
+═══════════════════════════════════════════════════ -->
+<div class="modal-sheet hidden" id="addRecordModal">
+  <div class="modal-header">
+    <h2 class="modal-title">Add Record</h2>
+    <button class="modal-close" data-modal="addRecordModal">✕</button>
+  </div>
+  <div class="modal-body">
+
+    <!-- Client selector -->
+    <div class="form-group" id="clientSelectorGroup">
+      <label class="form-label">Client</label>
+      <div class="search-container">
+        <input type="text" id="clientSearch" class="form-input search-input" placeholder="Search client…" autocomplete="off" autocorrect="off">
+        <div class="search-results hidden" id="clientSearchResults"></div>
+      </div>
+      <input type="hidden" id="selectedClientId">
+      <div class="selected-badge hidden" id="selectedClientBadge">
+        <span id="selectedClientName"></span>
+        <button class="badge-clear" id="clearClientBtn">✕</button>
+      </div>
+    </div>
+
+    <!-- Exercise selector -->
+    <div class="form-group">
+      <label class="form-label">Exercise</label>
+      <div class="search-container">
+        <input type="text" id="exerciseSearch" class="form-input search-input" placeholder="Search exercise…" autocomplete="off" autocorrect="off">
+        <div class="search-results hidden" id="exerciseSearchResults"></div>
+      </div>
+      <input type="hidden" id="selectedExerciseId">
+      <div class="selected-badge hidden" id="selectedExerciseBadge">
+        <span id="selectedExerciseName"></span>
+        <span class="badge-cat" id="selectedExerciseCat"></span>
+        <button class="badge-clear" id="clearExerciseBtn">✕</button>
+      </div>
+    </div>
+
+    <!-- Weight + Reps -->
+    <div class="metrics-row">
+      <div class="form-group metric-group">
+        <label class="form-label">Weight (lbs)</label>
+        <button class="metric-input-btn" id="weightBtn" data-field="weight">
+          <span class="metric-value" id="weightDisplay">—</span>
+          <span class="metric-unit">lbs</span>
+        </button>
+        <input type="hidden" id="weightVal">
+      </div>
+      <div class="form-group metric-group">
+        <label class="form-label">Reps</label>
+        <button class="metric-input-btn" id="repsBtn" data-field="reps">
+          <span class="metric-value" id="repsDisplay">—</span>
+          <span class="metric-unit">reps</span>
+        </button>
+        <input type="hidden" id="repsVal">
+      </div>
+    </div>
+
+    <!-- Volume display -->
+    <div class="volume-row hidden" id="volumeRow">
+      <span class="volume-label">Volume:</span>
+      <span class="volume-val" id="volumeDisplay">0</span>
+      <span class="volume-unit">lbs</span>
+    </div>
+
+    <button class="btn btn-primary btn-full btn-save" id="saveRecordBtn">SAVE RECORD</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     EXERCISE DETAIL MODAL
+═══════════════════════════════════════════════════ -->
+<div class="modal-sheet hidden" id="exerciseDetailModal">
+  <div class="modal-header">
+    <div class="modal-title-block">
+      <h2 class="modal-title" id="exDetailName">Exercise</h2>
+      <span class="cat-pill" id="exDetailCat"></span>
+    </div>
+    <button class="modal-close" data-modal="exerciseDetailModal">✕</button>
+  </div>
+  <div class="modal-body" id="exDetailBody">
+    <!-- Rankings rendered by JS -->
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     CLIENT FORM MODAL
+═══════════════════════════════════════════════════ -->
+<div class="modal-sheet hidden" id="clientFormModal">
+  <div class="modal-header">
+    <h2 class="modal-title" id="clientFormTitle">Add Client</h2>
+    <button class="modal-close" data-modal="clientFormModal">✕</button>
+  </div>
+  <div class="modal-body">
+    <input type="hidden" id="editClientId">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" id="clientName" class="form-input" placeholder="Full name" autocorrect="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Gender</label>
+      <div class="segmented-control" id="clientGenderControl">
+        <button class="seg-btn active" data-val="male">Male</button>
+        <button class="seg-btn" data-val="female">Female</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Role</label>
+      <div class="segmented-control" id="clientRoleControl">
+        <button class="seg-btn active" data-val="client">Client</button>
+        <button class="seg-btn" data-val="trainer">Trainer</button>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="saveClientBtn">SAVE</button>
+    <button class="btn btn-danger btn-full hidden" id="deleteClientBtn">DELETE CLIENT</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     EXERCISE FORM MODAL
+═══════════════════════════════════════════════════ -->
+<div class="modal-sheet hidden" id="exerciseFormModal">
+  <div class="modal-header">
+    <h2 class="modal-title" id="exerciseFormTitle">Add Exercise</h2>
+    <button class="modal-close" data-modal="exerciseFormModal">✕</button>
+  </div>
+  <div class="modal-body">
+    <input type="hidden" id="editExerciseId">
+    <div class="form-group">
+      <label class="form-label">Exercise Name</label>
+      <input type="text" id="exerciseName" class="form-input" placeholder="e.g. Bench Press" autocorrect="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <div class="category-grid" id="categoryGrid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="saveExerciseBtn">SAVE</button>
+    <button class="btn btn-danger btn-full hidden" id="deleteExerciseBtn">DELETE EXERCISE</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     NUMERIC KEYPAD
+═══════════════════════════════════════════════════ -->
+<div class="keypad-overlay hidden" id="keypadOverlay">
+  <div class="keypad-backdrop" id="keypadBackdrop"></div>
+  <div class="keypad-sheet">
+    <div class="keypad-header">
+      <span class="keypad-label" id="keypadLabel">Enter Value</span>
+      <span class="keypad-display" id="keypadDisplay">—</span>
+      <button class="keypad-done" id="keypadDone">Done</button>
+    </div>
+    <div class="keypad-grid">
+      <button class="key-btn" data-key="7">7</button>
+      <button class="key-btn" data-key="8">8</button>
+      <button class="key-btn" data-key="9">9</button>
+      <button class="key-btn" data-key="4">4</button>
+      <button class="key-btn" data-key="5">5</button>
+      <button class="key-btn" data-key="6">6</button>
+      <button class="key-btn" data-key="1">1</button>
+      <button class="key-btn" data-key="2">2</button>
+      <button class="key-btn" data-key="3">3</button>
+      <button class="key-btn" data-key=".">.</button>
+      <button class="key-btn" data-key="0">0</button>
+      <button class="key-btn key-del" data-key="del">⌫</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     CONFETTI CANVAS
+═══════════════════════════════════════════════════ -->
+<canvas id="confettiCanvas" class="confetti-canvas hidden"></canvas>
+
+<!-- ═══════════════════════════════════════════════════
+     TOAST NOTIFICATIONS
+═══════════════════════════════════════════════════ -->
+<div class="toast hidden" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
