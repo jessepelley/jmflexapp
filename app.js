@@ -258,7 +258,7 @@ function saveClient(fields) {
     const idx = App.data.clients.findIndex(c => c.id === fields.id);
     if (idx >= 0) App.data.clients[idx] = Object.assign(App.data.clients[idx], fields);
   } else {
-    App.data.clients.push({ id: uid(), ...fields });
+    App.data.clients.push({ ...fields, id: uid() });
   }
   save(); pushData();
 }
@@ -285,7 +285,7 @@ function saveExercise(fields) {
     const idx = App.data.exercises.findIndex(e => e.id === fields.id);
     if (idx >= 0) App.data.exercises[idx] = Object.assign(App.data.exercises[idx], fields);
   } else {
-    App.data.exercises.push({ id: uid(), ...fields });
+    App.data.exercises.push({ ...fields, id: uid() });
   }
   save(); pushData();
 }
