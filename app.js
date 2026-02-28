@@ -36,6 +36,7 @@ const App = {
   syncPending: false,
   lbCategoryFilter: 'all',   // 'all' or category name
   listSearchQuery: '',
+  detailClientId: null,      // client being viewed in clientDetail view
 
   // keypad state
   keypadTarget: null,  // 'weight' | 'reps'
@@ -413,11 +414,12 @@ function renderCurrentView() {
   const area = $id('contentArea');
   if (!area) return;
   const v = App.currentView;
-  if (v === 'leaderboard') area.innerHTML = renderLeaderboard();
-  else if (v === 'clients')    area.innerHTML = renderClients();
-  else if (v === 'exercises')  area.innerHTML = renderExercises();
-  else if (v === 'settings')   area.innerHTML = renderSettings();
-  else if (v === 'add')        { openAddRecordModal(); return; }
+  if (v === 'leaderboard')   area.innerHTML = renderLeaderboard();
+  else if (v === 'clients')       area.innerHTML = renderClients();
+  else if (v === 'exercises')     area.innerHTML = renderExercises();
+  else if (v === 'settings')      area.innerHTML = renderSettings();
+  else if (v === 'clientDetail')  area.innerHTML = renderClientDetail();
+  else if (v === 'add')           { openAddRecordModal(); return; }
   attachViewHandlers(v);
 }
 
@@ -566,6 +568,76 @@ function renderClientCard(c) {
   </div>`;
 }
 
+/* ── Client Detail View ──────────────────────────── */
+function renderClientDetail() {
+  const client = getClient(App.detailClientId);
+  if (!client) return `<div style="padding:20px;color:var(--c-text2)">Client not found.</div>`;
+
+  const records = (App.data.records || [])
+    .filter(r => r.clientId === client.id)
+    .map(r => ({ ...r, exercise: getExercise(r.exerciseId) }))
+    .filter(r => r.exercise)
+    .sort((a, b) => (b.volume || 0) - (a.volume || 0));
+
+  const totalVolume = records.reduce((sum, r) => sum + (r.volume || r.weight * r.reps || 0), 0);
+  const avatar = initials(client.name);
+  const roleClass = client.isTrainer ? 'trainer' : client.gender;
+  const badge = client.isTrainer ? `<span class="trainer-badge">TRAINER</span>` : '';
+
+  let recordRows = '';
+  if (records.length === 0) {
+    recordRows = `<div style="padding:20px;color:var(--c-text2);text-align:center">No records yet</div>`;
+  } else {
+    recordRows = records.map(r => `
+      <div class="list-card" style="cursor:default">
+        <div class="list-card-avatar" style="border-radius:10px;font-size:12px">${escHtml((r.exercise.category||'?').substring(0,3).toUpperCase())}</div>
+        <div class="list-card-info">
+          <div class="list-card-name">${escHtml(r.exercise.name)}</div>
+          <div class="list-card-meta">${escHtml(r.exercise.category||'')} · ${fmt(r.weight)} lbs × ${fmt(r.reps)} reps</div>
+        </div>
+        <div class="list-card-right" style="text-align:right">
+          <div style="font-weight:700;color:var(--c-light)">${fmtVolume(r.volume || r.weight * r.reps)} lbs</div>
+          <div style="font-size:11px;color:var(--c-muted)">volume</div>
+        </div>
+      </div>`).join('');
+  }
+
+  return `
+    <div class="view" style="padding-top:16px">
+      <div class="view-header" style="padding:0 0 16px;display:flex;align-items:center;gap:12px">
+        <button class="btn btn-sm btn-outline" id="backToClientsBtn">← Back</button>
+        <span class="view-title" style="flex:1">Client Profile</span>
+        <button class="btn btn-sm btn-outline" id="editClientDetailBtn">Edit</button>
+      </div>
+
+      <div class="list-card" style="margin-bottom:20px;cursor:default">
+        <div class="list-card-avatar ${roleClass}" style="width:52px;height:52px;font-size:20px">${avatar}</div>
+        <div class="list-card-info">
+          <div class="list-card-name" style="font-size:18px">${escHtml(client.name)} ${badge}</div>
+          <div class="list-card-meta">${genderLabel(client.gender)}</div>
+        </div>
+        ${!client.isTrainer ? `<button class="list-card-session-btn" id="startSessionDetailBtn">Session</button>` : ''}
+      </div>
+
+      <div class="settings-group" style="margin-bottom:20px">
+        <div class="settings-group-title">Stats</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px">
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:800;color:var(--c-accent)">${records.length}</div>
+            <div style="font-size:12px;color:var(--c-text2)">Personal Bests</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:800;color:var(--c-light)">${fmtVolume(totalVolume)}</div>
+            <div style="font-size:12px;color:var(--c-text2)">Total Volume (lbs)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="list-section-header">Personal Bests (${records.length})</div>
+      <div class="list-items">${recordRows}</div>
+    </div>`;
+}
+
 /* ── Exercises View ──────────────────────────────── */
 function renderExercises() {
   const exercises = getExercises();
@@ -703,8 +775,30 @@ function renderSettings() {
 
       <input type="file" id="importAllFile" accept=".json" class="hidden">
 
+      <div class="settings-group">
+        <div class="settings-group-title">About</div>
+        <div class="settings-row" id="githubLinkRow" style="cursor:pointer">
+          <span class="settings-row-icon">🐙</span>
+          <div class="settings-row-info">
+            <div class="settings-row-label">GitHub Repository</div>
+            <div class="settings-row-sub">jessepelley/jmflexapp</div>
+          </div>
+          <span class="settings-chevron">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-icon">📋</span>
+          <div class="settings-row-info">
+            <div class="settings-row-label">Version History</div>
+            <div class="settings-row-sub" style="line-height:1.6">
+              <strong style="color:var(--c-accent)">v2.0</strong> — Client detail view, search fix, cache busting<br>
+              <strong>v1.0</strong> — Initial release: leaderboard, records, sync, CSV
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="text-align:center;padding:20px;color:var(--c-muted);font-size:12px">
-        JM Flex App · Built for iPad &amp; iPhone
+        JM Flex App v2.0 · Built for iPad &amp; iPhone
       </div>
     </div>`;
 }
@@ -713,10 +807,11 @@ function renderSettings() {
    VIEW EVENT HANDLERS
 ═══════════════════════════════════════════════════ */
 function attachViewHandlers(view) {
-  if (view === 'leaderboard') attachLeaderboardHandlers();
-  else if (view === 'clients')    attachClientsHandlers();
-  else if (view === 'exercises')  attachExercisesHandlers();
-  else if (view === 'settings')   attachSettingsHandlers();
+  if (view === 'leaderboard')  attachLeaderboardHandlers();
+  else if (view === 'clients')      attachClientsHandlers();
+  else if (view === 'exercises')    attachExercisesHandlers();
+  else if (view === 'settings')     attachSettingsHandlers();
+  else if (view === 'clientDetail') attachClientDetailHandlers();
 }
 
 function attachLeaderboardHandlers() {
@@ -742,13 +837,21 @@ function attachClientsHandlers() {
   if (search) {
     search.addEventListener('input', () => { App.listSearchQuery = search.value; renderCurrentView(); });
     search.focus();
+    const len = search.value.length;
+    search.setSelectionRange(len, len);
   }
 
-  // Edit client
+  // Open client detail view
   document.querySelectorAll('[data-client-id]').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('[data-client-session]')) return;
-      openClientForm(card.dataset.clientId);
+      App.detailClientId = card.dataset.clientId;
+      App.currentView = 'clientDetail';
+      // Keep 'clients' nav tab active
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === 'clients');
+      });
+      renderCurrentView();
     });
   });
 
@@ -779,6 +882,8 @@ function attachExercisesHandlers() {
   if (search) {
     search.addEventListener('input', () => { App.listSearchQuery = search.value; renderCurrentView(); });
     search.focus();
+    const len = search.value.length;
+    search.setSelectionRange(len, len);
   }
 
   // Edit exercise
@@ -843,6 +948,22 @@ function attachSettingsHandlers() {
       renderCurrentView();
     }
   });
+
+  const githubRow = $id('githubLinkRow');
+  if (githubRow) githubRow.addEventListener('click', () => {
+    window.open('https://github.com/jessepelley/jmflexapp', '_blank');
+  });
+}
+
+function attachClientDetailHandlers() {
+  const backBtn = $id('backToClientsBtn');
+  if (backBtn) backBtn.addEventListener('click', () => switchView('clients'));
+
+  const editBtn = $id('editClientDetailBtn');
+  if (editBtn) editBtn.addEventListener('click', () => openClientForm(App.detailClientId));
+
+  const sessionBtn = $id('startSessionDetailBtn');
+  if (sessionBtn) sessionBtn.addEventListener('click', () => startClientSession(App.detailClientId));
 }
 
 /* ═══════════════════════════════════════════════════
