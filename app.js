@@ -1402,11 +1402,12 @@ function openExerciseDetail(exerciseId) {
   $id('exDetailName').textContent = exercise.name;
   $id('exDetailCat').textContent = exercise.category || '';
 
-  const rankings = getExerciseRecords(exerciseId, null); // show all athletes regardless of gender filter
+  const gender = App.data.settings.genderFilter;
+  const rankings = getExerciseRecords(exerciseId, gender);
   const body = $id('exDetailBody');
 
   if (rankings.length === 0) {
-    body.innerHTML = `<div class="detail-empty">No records yet</div>`;
+    body.innerHTML = `<div class="detail-empty">No records for ${genderLabel(gender)} athletes yet</div>`;
   } else {
     const medals = ['🥇','🥈','🥉'];
     body.innerHTML = `<div class="detail-ranking-list">` +
