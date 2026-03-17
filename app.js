@@ -16,6 +16,7 @@ function defaultData() {
     clients: [],
     exercises: [],
     records: [],       // one record per (clientId, exerciseId) = personal best
+    history: [],       // all logged personal bests for progression tracking
     settings: {
       apiKey: '',
       apiUrl: 'https://jjjp.ca/jmflexapp',
@@ -172,6 +173,9 @@ async function validateApiKey(url, key) {
 async function syncToServer() {
   if (!App.data.settings.apiKey || !App.data.settings.apiUrl) return;
   setSyncStatus('syncing');
+
+  const prevFingerprint = dataFingerprint();
+
   const result = await apiCall('sync', {
     data: App.data,
     timestamp: App.data.settings.lastSync
@@ -194,7 +198,10 @@ async function syncToServer() {
       lastSync: result.timestamp || Date.now()
     });
     save();
-    renderCurrentView();
+    // Only re-render if data actually changed — prevents the sync glitch
+    if (dataFingerprint() !== prevFingerprint) {
+      renderCurrentViewSmooth();
+    }
     updateHeaderState();
   }
   setSyncStatus('synced');
@@ -266,7 +273,8 @@ function saveClient(fields) {
 
 function deleteClient(id) {
   App.data.clients = App.data.clients.filter(c => c.id !== id);
-  App.data.records = App.data.records.filter(r => r.clientId !== id);
+  App.data.records  = App.data.records.filter(r => r.clientId !== id);
+  App.data.history  = (App.data.history || []).filter(h => h.clientId !== id);
   save(); pushData();
 }
 
@@ -293,7 +301,8 @@ function saveExercise(fields) {
 
 function deleteExercise(id) {
   App.data.exercises = App.data.exercises.filter(e => e.id !== id);
-  App.data.records = App.data.records.filter(r => r.exerciseId !== id);
+  App.data.records   = App.data.records.filter(r => r.exerciseId !== id);
+  App.data.history   = (App.data.history || []).filter(h => h.exerciseId !== id);
   save(); pushData();
 }
 
@@ -313,6 +322,13 @@ function getExerciseRecords(exerciseId, genderFilter) {
     });
   }
   return records.sort((a,b) => b.weight - a.weight || b.reps - a.reps);
+}
+
+// Returns history entries for a client+exercise sorted oldest→newest
+function getClientHistory(clientId, exerciseId) {
+  return (App.data.history || [])
+    .filter(h => h.clientId === clientId && h.exerciseId === exerciseId)
+    .sort((a, b) => a.loggedAt - b.loggedAt);
 }
 
 function isNewBest(existing, newWeight, newReps) {
@@ -347,6 +363,10 @@ function saveRecord(clientId, exerciseId, weight, reps) {
   } else {
     App.data.records.push({ id: uid(), clientId, exerciseId, weight, reps, volume, updatedAt: now });
   }
+
+  // Log this personal best in history for progression tracking
+  App.data.history = App.data.history || [];
+  App.data.history.push({ id: uid(), clientId, exerciseId, weight, reps, volume, loggedAt: now });
 
   save(); pushData();
 
@@ -431,13 +451,43 @@ function renderCurrentView() {
   const area = $id('contentArea');
   if (!area) return;
   const v = App.currentView;
-  if (v === 'leaderboard')   area.innerHTML = renderLeaderboard();
+  if (v === 'leaderboard')        area.innerHTML = renderLeaderboard();
   else if (v === 'clients')       area.innerHTML = renderClients();
   else if (v === 'exercises')     area.innerHTML = renderExercises();
   else if (v === 'settings')      area.innerHTML = renderSettings();
   else if (v === 'clientDetail')  area.innerHTML = renderClientDetail();
   else if (v === 'add')           { openAddRecordModal(); return; }
   attachViewHandlers(v);
+}
+
+// Smooth fade used for sync-triggered re-renders to avoid visual glitch
+function renderCurrentViewSmooth() {
+  const area = $id('contentArea');
+  if (!area) return;
+  area.style.opacity = '0';
+  area.style.transition = 'opacity 0.22s ease';
+  setTimeout(() => {
+    const v = App.currentView;
+    if (v === 'leaderboard')        area.innerHTML = renderLeaderboard();
+    else if (v === 'clients')       area.innerHTML = renderClients();
+    else if (v === 'exercises')     area.innerHTML = renderExercises();
+    else if (v === 'settings')      area.innerHTML = renderSettings();
+    else if (v === 'clientDetail')  area.innerHTML = renderClientDetail();
+    if (v !== 'add') attachViewHandlers(v);
+    area.style.opacity = '1';
+    setTimeout(() => { area.style.transition = ''; area.style.opacity = ''; }, 250);
+  }, 220);
+}
+
+// Lightweight fingerprint of data content to detect real changes from sync
+function dataFingerprint() {
+  const d = App.data;
+  return (
+    (d.clients   || []).map(c => c.id + c.name).join(',') + '|' +
+    (d.exercises  || []).map(e => e.id + e.name).join(',') + '|' +
+    (d.records    || []).map(r => r.id + r.weight + r.reps + r.updatedAt).join(',') + '|' +
+    (d.history    || []).length
+  );
 }
 
 /* ── Leaderboard ─────────────────────────────────── */
@@ -605,18 +655,40 @@ function renderClientDetail() {
   if (records.length === 0) {
     recordRows = `<div style="padding:20px;color:var(--c-text2);text-align:center">No records yet</div>`;
   } else {
-    recordRows = records.map(r => `
+    recordRows = records.map(r => {
+      const hist = getClientHistory(client.id, r.exercise.id);
+      let progHtml = '';
+      if (hist.length >= 2) {
+        const first = hist[0];
+        const gainLbs = Math.round((r.weight - first.weight) * 10) / 10;
+        const gainPct = first.weight > 0 ? Math.round((gainLbs / first.weight) * 100) : 0;
+        const gainTag = gainLbs > 0
+          ? `<span class="prog-gain">↑ ${fmt(gainLbs)} lbs (${gainPct}%)</span>`
+          : '';
+        progHtml = `<div class="prog-row">
+          <span class="prog-start">${fmt(first.weight)} × ${fmt(first.reps)}</span>
+          <span class="prog-arrow">→</span>
+          <span class="prog-best">${fmt(r.weight)} × ${fmt(r.reps)}</span>
+          ${gainTag}
+          <span class="prog-sessions">${hist.length} sessions</span>
+        </div>`;
+      } else if (hist.length === 1) {
+        progHtml = `<div class="prog-row"><span class="prog-sessions">1 session logged</span></div>`;
+      }
+      return `
       <div class="list-card" style="cursor:default">
         <div class="list-card-avatar" style="border-radius:10px;font-size:12px">${escHtml((r.exercise.category||'?').substring(0,3).toUpperCase())}</div>
         <div class="list-card-info">
           <div class="list-card-name">${escHtml(r.exercise.name)}</div>
           <div class="list-card-meta">${escHtml(r.exercise.category||'')} · ${fmt(r.weight)} lbs × ${fmt(r.reps)} reps</div>
+          ${progHtml}
         </div>
         <div class="list-card-right" style="text-align:right;gap:8px;display:flex;flex-direction:column;align-items:flex-end">
           <div style="font-weight:700;color:var(--c-light)">${fmtVolume(r.volume || r.weight * r.reps)} lbs</div>
           <button class="btn btn-sm btn-outline" data-edit-record-client="${escHtml(client.id)}" data-edit-record-exercise="${escHtml(r.exercise.id)}" style="font-size:11px;padding:2px 8px">Edit</button>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   return `
@@ -807,7 +879,8 @@ function renderSettings() {
           <div class="settings-row-info">
             <div class="settings-row-label">Version History</div>
             <div class="settings-row-sub" style="line-height:1.6">
-              <strong style="color:var(--c-accent)">v2.0</strong> — Client detail view, search fix, cache busting<br>
+              <strong style="color:var(--c-accent)">v2.1</strong> — Progression tracking, light mode, sync glitch fix<br>
+              <strong>v2.0</strong> — Client detail view, search fix, cache busting<br>
               <strong>v1.0</strong> — Initial release: leaderboard, records, sync, CSV
             </div>
           </div>
@@ -815,7 +888,7 @@ function renderSettings() {
       </div>
 
       <div style="text-align:center;padding:20px;color:var(--c-muted);font-size:12px">
-        JM Flex App v2.0 · Built for iPad &amp; iPhone
+        JM Flex App v2.1 · Built for iPad &amp; iPhone
       </div>
     </div>`;
 }
@@ -1281,12 +1354,14 @@ function handleSaveRecord() {
   if (af.forceUpdate) {
     showToast(`✓ Record updated — ${fmt(weight)} lbs × ${fmt(reps)} reps`, 'success');
     if (App.currentView === 'clientDetail') renderCurrentView();
-  } else if (result.isGold && !result.wasGold) {
-    // New #1 — confetti!
-    triggerConfetti();
-    showToast(`🥇 NEW #1 for ${af.exerciseName}!`, 'success', 4000);
   } else if (result.saved) {
-    showToast(`✓ Record saved — ${fmt(weight)} lbs × ${fmt(reps)} reps`, 'success');
+    // New personal best — always trigger confetti!
+    triggerConfetti();
+    if (result.isGold && !result.wasGold) {
+      showToast(`🥇 NEW #1 for ${af.exerciseName}!`, 'success', 4000);
+    } else {
+      showToast(`🎉 New personal best! ${fmt(weight)} lbs × ${fmt(reps)} reps`, 'success', 3500);
+    }
   }
 
   if (App.currentView === 'leaderboard') renderCurrentView();
@@ -1776,6 +1851,22 @@ function importAllData(file) {
 }
 
 /* ═══════════════════════════════════════════════════
+   THEME
+═══════════════════════════════════════════════════ */
+function applyTheme(light) {
+  document.body.classList.toggle('light-mode', !!light);
+  const btn = $id('themeToggle');
+  if (btn) btn.textContent = light ? '🌙' : '☀️';
+  btn && (btn.title = light ? 'Switch to dark mode' : 'Switch to light mode');
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.contains('light-mode');
+  localStorage.setItem('jmflex_theme', isLight ? 'dark' : 'light');
+  applyTheme(!isLight);
+}
+
+/* ═══════════════════════════════════════════════════
    CONFETTI
 ═══════════════════════════════════════════════════ */
 function triggerConfetti() {
@@ -1866,6 +1957,9 @@ function attachGlobalHandlers() {
     renderCurrentView();
   });
 
+  // Theme toggle
+  $id('themeToggle')?.addEventListener('click', toggleTheme);
+
   // Client banner exit
   $id('cbExit').addEventListener('click', endClientSession);
 
@@ -1907,6 +2001,9 @@ document.addEventListener('DOMContentLoaded', () => {
 ═══════════════════════════════════════════════════ */
 function init() {
   load();
+
+  // Apply saved theme before first render to avoid flash
+  applyTheme(localStorage.getItem('jmflex_theme') === 'light');
 
   const s = App.data.settings;
 

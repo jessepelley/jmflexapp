@@ -29,6 +29,19 @@
   --shadow:      0 4px 24px rgba(0,0,0,0.5);
 }
 
+/* ── Light Mode ──────────────────────────────────── */
+body.light-mode {
+  --c-bg:      #eef2f8;
+  --c-surface: #ffffff;
+  --c-card:    #f4f7fd;
+  --c-card2:   #e8effd;
+  --c-border:  #c5d5ee;
+  --c-text:    #0d1628;
+  --c-text2:   #3d5270;
+  --c-muted:   #6878a0;
+  --shadow:    0 4px 24px rgba(0,0,0,0.1);
+}
+
 /* ── Reset ───────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; -webkit-tap-highlight-color: transparent; }
@@ -162,6 +175,19 @@ button { cursor: pointer; }
 .gt-opt { color: var(--c-muted); transition: color 0.2s; }
 .gt-opt.active { color: var(--c-accent); }
 .gt-sep { color: var(--c-border); }
+
+/* Theme Toggle */
+.theme-toggle {
+  width: 32px; height: 32px;
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.theme-toggle:active { background: var(--c-card2); }
 
 /* Sync Dot */
 .sync-dot {
@@ -905,6 +931,28 @@ button { cursor: pointer; }
 .toast.success { border-color: var(--c-success); background: rgba(34,197,94,0.15); }
 .toast.error   { border-color: var(--c-danger);  background: rgba(229,57,53,0.15); }
 .toast.info    { border-color: var(--c-mid); background: rgba(90,132,207,0.15); }
+
+/* ── Progression Row ─────────────────────────────── */
+.prog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  font-size: 11px;
+}
+.prog-start  { color: var(--c-text2); }
+.prog-arrow  { color: var(--c-border); }
+.prog-best   { color: var(--c-success); font-weight: 700; }
+.prog-gain {
+  background: rgba(34,197,94,0.12);
+  color: var(--c-success);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-weight: 700;
+  font-size: 10px;
+}
+.prog-sessions { color: var(--c-muted); font-size: 10px; }
 
 /* ── Utility ─────────────────────────────────────── */
 .flex-row { display: flex; align-items: center; gap: 8px; }
