@@ -377,6 +377,17 @@ function saveRecord(clientId, exerciseId, weight, reps) {
   return { saved: true, wasGold, isGold };
 }
 
+// Delete a single client+exercise record (and its history)
+function deleteRecord(clientId, exerciseId) {
+  App.data.records = App.data.records.filter(
+    r => !(r.clientId === clientId && r.exerciseId === exerciseId)
+  );
+  App.data.history = (App.data.history || []).filter(
+    h => !(h.clientId === clientId && h.exerciseId === exerciseId)
+  );
+  save(); pushData();
+}
+
 // Overwrite a record unconditionally (used to correct bad data)
 function forceUpdateRecord(clientId, exerciseId, weight, reps) {
   const volume = Math.round(weight * reps);
@@ -1118,6 +1129,7 @@ function openAddRecordModal() {
   const saveBtn = $id('saveRecordBtn');
   if (titleEl) titleEl.textContent = 'Add Record';
   if (saveBtn) saveBtn.textContent = 'SAVE RECORD';
+  $id('deleteRecordBtn').classList.add('hidden');
 
   resetAddForm();
 
@@ -1164,6 +1176,7 @@ function openEditRecordModal(clientId, exerciseId) {
   const saveBtn = $id('saveRecordBtn');
   if (titleEl) titleEl.textContent = 'Edit Record';
   if (saveBtn) saveBtn.textContent = 'SAVE CHANGES';
+  $id('deleteRecordBtn').classList.remove('hidden');
 
   updateVolumeDisplay();
   openModal('addRecordModal');
@@ -1278,6 +1291,20 @@ function attachAddRecordHandlers() {
   const repsBtn = $id('repsBtn');
   if (repsBtn) repsBtn.addEventListener('click', () => openKeypad('reps'));
 
+  // Delete record (edit mode only)
+  const deleteRecordBtn = $id('deleteRecordBtn');
+  if (deleteRecordBtn) deleteRecordBtn.addEventListener('click', () => {
+    const { clientId, exerciseId, exerciseName } = App.addForm;
+    if (!clientId || !exerciseId) return;
+    const client = getClient(clientId);
+    if (confirm(`Delete ${client ? client.name + "'s" : 'this'} record for ${exerciseName || 'this exercise'}? This cannot be undone.`)) {
+      deleteRecord(clientId, exerciseId);
+      closeModal('addRecordModal');
+      showToast('Record deleted', 'info');
+      if (App.currentView === 'clientDetail' || App.currentView === 'leaderboard') renderCurrentView();
+    }
+  });
+
   // Save
   const saveBtn = $id('saveRecordBtn');
   if (saveBtn) saveBtn.addEventListener('click', handleSaveRecord);
@@ -1353,7 +1380,7 @@ function handleSaveRecord() {
 
   if (af.forceUpdate) {
     showToast(`✓ Record updated — ${fmt(weight)} lbs × ${fmt(reps)} reps`, 'success');
-    if (App.currentView === 'clientDetail') renderCurrentView();
+    if (App.currentView === 'clientDetail' || App.currentView === 'leaderboard') renderCurrentView();
   } else if (result.saved) {
     // New personal best — always trigger confetti!
     triggerConfetti();
@@ -1417,11 +1444,11 @@ function openExerciseDetail(exerciseId) {
         <button class="btn btn-primary btn-full" id="addToExBtn">➕ Add / Update Record</button>
       </div>`;
 
-    // Edit record buttons
+    // Edit record buttons — use force-update mode so lower values are accepted
     body.querySelectorAll('[data-edit-record]').forEach(btn => {
       btn.addEventListener('click', () => {
         closeModal('exerciseDetailModal');
-        openAddRecordForClient(btn.dataset.editRecord, exerciseId);
+        openEditRecordModal(btn.dataset.editRecord, exerciseId);
       });
     });
 
