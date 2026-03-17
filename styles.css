@@ -39,8 +39,20 @@ body.light-mode {
   --c-text:    #0d1628;
   --c-text2:   #3d5270;
   --c-muted:   #6878a0;
+  --c-white:   #0d1628;  /* text-on-surface: dark in light mode */
+  --c-accent:  #cc8800;  /* amber replaces yellow for contrast on light surfaces */
   --shadow:    0 4px 24px rgba(0,0,0,0.1);
 }
+/* Preserve white text on colored/gradient backgrounds */
+body.light-mode .btn-primary,
+body.light-mode .nav-icon-add,
+body.light-mode .list-card-session-btn,
+body.light-mode .selected-badge,
+body.light-mode .seg-btn.active,
+body.light-mode .filter-pill.active,
+body.light-mode .keypad-done,
+body.light-mode .cb-exit,
+body.light-mode .client-banner { color: #ffffff; }
 
 /* ── Reset ───────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
